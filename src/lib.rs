@@ -1,4 +1,5 @@
 use std::cmp::min;
+use std::convert::From;
 
 fn highest_bit(mut x: u64) -> usize {
     if x == 0 {
@@ -18,13 +19,14 @@ fn highest_bit(mut x: u64) -> usize {
 }
 
 pub struct SparseTable<T> {
-    table: Vec<Vec<T>>
+    table: Vec<Vec<T>>,
+    row: Vec<usize>
 }
 
 impl<T> SparseTable<T> where T: Ord + Clone {
-    pub fn new(seq: &[T]) -> SparseTable<T> {
+    fn from_vec(seq: Vec<T>) -> Self {
         let size = seq.len();
-        let mut rows = vec![seq.to_vec()];
+        let mut rows = vec![seq];
         let mut i = 1;
 
         while (1 << i) <= size {
@@ -41,15 +43,29 @@ impl<T> SparseTable<T> where T: Ord + Clone {
         }
 
         SparseTable {
-            table: rows
+            table: rows,
+            row: (0..size + 1).map(|x| {
+                if x != 0 {
+                    highest_bit(x as u64)
+                } else {
+                    0
+                }
+            }).collect()
         }
     }
 
+    pub fn new(seq: &[T]) -> Self {
+        Self::from_vec(seq.to_vec())
+    }
+
     pub fn smallest(&self, l: usize, r: usize) -> &T {
-        if l >= r || r > self.table[0].len() {
+        if l >= r {
             panic!("No smallest element in an empty range");
         }
-        let row = highest_bit((r - l) as u64);
+        if r > self.table[0].len() {
+            panic!("Right bound is out of bounds");
+        }
+        let row = self.row[r - l];
         let span = 1 << row;
         min(&self.table[row][l], &self.table[row][r - span])
     }
@@ -59,6 +75,12 @@ impl<T> SparseTable<T> where T: Ord + Clone {
             return default.clone();
         }
         self.smallest(l, min(r, self.table[0].len())).clone()
+    }
+}
+
+impl<S, T> From<S> for SparseTable<T> where S: Into<Vec<T>>, T: Ord + Clone {
+    fn from(seq: S) -> Self {
+        SparseTable::<T>::from_vec(seq.into())
     }
 }
 
@@ -155,20 +177,36 @@ fn test_highest_bit() {
 #[test]
 #[should_panic]
 fn test_empty_sparse_table_panics() {
-    let st: SparseTable<u32> = SparseTable::new(&[]);
+    let st = SparseTable::<u32>::new(&[]);
     st.smallest(0, 1);
 }
 
 #[test]
 #[should_panic]
 fn test_sparse_table_empty_range_panics() {
-    let st: SparseTable<u32> = SparseTable::new(&[]);
+    let st = SparseTable::<u32>::new(&[]);
     st.smallest(0, 0);
 }
 
 #[test]
+fn test_sparse_table_from_vec() {
+    let seq: Vec<u32> = vec![0, 1, 2, 3];
+    let st = SparseTable::from(seq);
+    assert_eq!(*st.smallest(0, 1), 0);
+    assert_eq!(*st.smallest(1, 2), 1);
+    assert_eq!(*st.smallest(2, 3), 2);
+    assert_eq!(*st.smallest(3, 4), 3);
+    assert_eq!(*st.smallest(0, 2), 0);
+    assert_eq!(*st.smallest(1, 3), 1);
+    assert_eq!(*st.smallest(2, 4), 2);
+    assert_eq!(*st.smallest(0, 3), 0);
+    assert_eq!(*st.smallest(1, 4), 1);
+    assert_eq!(*st.smallest(0, 4), 0);
+}
+
+#[test]
 fn test_sparse_table() {
-    let st1: SparseTable<u32> = SparseTable::new(&[1, 0, 1, 0, 1, 0]);
+    let st1 = SparseTable::<u32>::new(&[1, 0, 1, 0, 1, 0]);
     assert_eq!(*st1.smallest(0, 1), 1);
     assert_eq!(*st1.smallest(1, 2), 0);
     assert_eq!(*st1.smallest(2, 3), 1);
@@ -201,7 +239,7 @@ fn test_sparse_table() {
     assert_eq!(st1.smallest_with_default(7, 7, &42), 42);
     assert_eq!(st1.smallest_with_default(6, 7, &42), 42);
 
-    let st2: SparseTable<u32> = SparseTable::new(&[0, 1, 2, 3, 4, 5]);
+    let st2 = SparseTable::<u32>::new(&[0, 1, 2, 3, 4, 5]);
     assert_eq!(*st2.smallest(0, 1), 0);
     assert_eq!(*st2.smallest(1, 2), 1);
     assert_eq!(*st2.smallest(2, 3), 2);
